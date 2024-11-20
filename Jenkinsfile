@@ -3,14 +3,20 @@ pipeline {
     
     environment {
         IMAGE_NAME = 'abdelrahman495/simple-flask-app'
-        IMAGE_TAG = 'latest'
+        IMAGE_TAG = '0.2'
     }
     
     stages {
         stage('Test the application') {
+            agent {
+                docker {
+                    image 'python:3.9.20-alpine3.20'
+                    args '-u root -v .:/workspace'
+                }
+            }
             steps {
                 script {
-                    withPythonEnv('/usr/bin/python3'){
+                    withPythonEnv('/usr/local/bin/python3') {
                         sh 'pip install bandit'
                         sh 'bandit -r app.py --exit-zero'
                     }
@@ -27,9 +33,15 @@ pipeline {
         }
         
         stage('Scan the image') {
+            agent {
+                docker {
+                    image 'aquasec/trivy:latest'
+                    args '-u root --entrypoint=""'
+                }
+            }
             steps {
                 script {
-                    sh 'trivy --quiet ${IMAGE_NAME}:${IMAGE_TAG}'
+                    sh 'trivy image --quiet ${IMAGE_NAME}:${IMAGE_TAG}'
                 }
             }
         }
@@ -43,6 +55,15 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy the application') {
+            steps {
+                script {
+                    def flaskImage = docker.image("${IMAGE_NAME}:${IMAGE_TAG}")
+                    flaskImage.run('--name my-flask-app -p 8081:5000')
+                }
+            }
+        }   
     }
 }
 
